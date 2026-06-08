@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import Layout from '../components/Layout'
 import { ToastProvider } from '../components/Toast'
 import { withAuth } from '../components/withAuth'
-import { getMovimentacoes, getContas, getCompromissos } from '../lib/supabase'
+import { getMovimentacoes, getContas, getCompromissos, getFundos } from '../lib/supabase'
 import { fmt, filtrarMes, mesAtual, somaReceitas, somaDespesas, calcSaldoConta, calcPatrimonio, alertasProximos, diffDays, TIPO_ICON } from '../lib/utils'
 import { Chart, registerables } from 'chart.js'
 Chart.register(...registerables)
@@ -11,6 +11,7 @@ function Dashboard({ user }) {
   const [movs, setMovs] = useState([])
   const [contas, setContas] = useState([])
   const [comps, setComps] = useState([])
+  const [fundos, setFundos] = useState([])
   const [loading, setLoading] = useState(true)
   const barRef = useRef(null)
   const pieRef = useRef(null)
@@ -22,8 +23,9 @@ function Dashboard({ user }) {
       getMovimentacoes(user.id),
       getContas(user.id),
       getCompromissos(user.id),
-    ]).then(([m, c, co]) => {
-      setMovs(m); setContas(c); setComps(co); setLoading(false)
+      getFundos(user.id),
+    ]).then(([m, c, co, f]) => {
+      setMovs(m); setContas(c); setComps(co); setFundos(f); setLoading(false)
     })
   }, [user.id])
 
@@ -76,7 +78,7 @@ function Dashboard({ user }) {
   const rec = somaReceitas(mesMov)
   const desp = somaDespesas(mesMov)
   const saldo = rec - desp
-  const patrimonio = calcPatrimonio(contas, movs)
+  const patrimonio = calcPatrimonio(contas, movs, fundos)
   const alertas = alertasProximos(comps)
   const ultimas = [...movs].slice(0, 6)
 
@@ -85,7 +87,7 @@ function Dashboard({ user }) {
   return (
     <ToastProvider>
       <div className="g4">
-        <div className="metric"><div className="metric-label">Patrimônio Total</div><div className="metric-value" style={{ color: patrimonio >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmt(patrimonio)}</div><div className="metric-sub">Soma de todas as contas</div></div>
+        <div className="metric"><div className="metric-label">Patrimônio Total</div><div className="metric-value" style={{ color: patrimonio >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmt(patrimonio)}</div><div className="metric-sub">Saldo disponível em todas as contas</div></div>
         <div className="metric"><div className="metric-label">Receitas do Mês</div><div className="metric-value" style={{ color: 'var(--green)' }}>{fmt(rec)}</div><div className="metric-sub">{mesMov.filter(m => m.tipo === 'receita').length} lançamentos</div></div>
         <div className="metric"><div className="metric-label">Despesas do Mês</div><div className="metric-value" style={{ color: 'var(--red)' }}>{fmt(desp)}</div><div className="metric-sub">{mesMov.filter(m => m.tipo === 'despesa').length} lançamentos</div></div>
         <div className="metric"><div className="metric-label">Saldo do Mês</div><div className="metric-value" style={{ color: saldo >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmt(saldo)}</div><div className="metric-sub">{saldo >= 0 ? '✅ No azul' : '⚠️ No vermelho'}</div></div>
@@ -106,7 +108,7 @@ function Dashboard({ user }) {
         <div className="card">
           <div className="card-title">Saldo por Conta</div>
           {contas.length === 0 ? <div className="empty"><span className="empty-icon">🏦</span>Nenhuma conta cadastrada</div> : contas.map(c => {
-            const s = calcSaldoConta(c, movs)
+            const s = calcSaldoConta(c, movs, fundos)
             return (
               <div key={c.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -148,7 +150,7 @@ function Dashboard({ user }) {
   )
 }
 
-export function TxItem({ m, onDelete }) {
+export function TxItem({ m }) {
   const isRec = m.tipo === 'receita', isT = m.tipo === 'transferencia'
   const cor = isRec ? 'var(--green)' : isT ? 'var(--sky)' : 'var(--red)'
   return (
@@ -168,7 +170,6 @@ export function TxItem({ m, onDelete }) {
         <div className="tx-amount" style={{ color: cor }}>{isRec ? '+' : isT ? '' : '-'}{fmt(m.valor)}</div>
         <div className="tx-date">{new Date(m.data + 'T12:00:00').toLocaleDateString('pt-BR')}</div>
       </div>
-      {onDelete && <button className="btn btn-danger btn-sm btn-icon" onClick={() => onDelete(m.id)}>✕</button>}
     </div>
   )
 }
